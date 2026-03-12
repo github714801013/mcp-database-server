@@ -3,7 +3,13 @@
  * 结合正则模式匹配和 SQL 语法解析，提供多层防护
  */
 
-import { Parser, AST } from 'node-sql-parser';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const sqlParserPkg = require('node-sql-parser');
+const { Parser } = sqlParserPkg;
+
+// 类型导入（仅用于 TypeScript 类型检查）
+import type { AST } from 'node-sql-parser';
 
 /**
  * SQL 注入检测配置

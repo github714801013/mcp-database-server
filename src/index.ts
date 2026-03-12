@@ -16,6 +16,12 @@ import { initDatabase, closeDatabase, getDatabaseMetadata } from './db/index.js'
 import { handleListResources, handleReadResource } from './handlers/resourceHandlers.js';
 import { handleListTools, handleToolCall } from './handlers/toolHandlers.js';
 
+// Import security config
+import { initSecurityConfig, parseSecurityConfigFromArgs } from './config/securityConfig.js';
+
+// Import SQL injection guard
+import { initSqlInjectionConfig, parseSqlInjectionConfigFromArgs } from './utils/sqlInjectionGuard.js';
+
 // Setup a logger that uses stderr instead of stdout to avoid interfering with MCP communications
 const logger = {
   log: (...args: any[]) => console.error('[INFO]', ...args),
@@ -47,6 +53,25 @@ if (args.length === 0) {
   logger.error("Usage for PostgreSQL: node index.js --postgresql --host <host> --database <database> [--user <user> --password <password> --port <port>]");
   logger.error("Usage for MySQL: node index.js --mysql --host <host> --database <database> [--user <user> --password <password> --port <port>]");
   logger.error("Usage for MySQL with AWS IAM: node index.js --mysql --aws-iam-auth --host <rds-endpoint> --database <database> --user <aws-username> --aws-region <region>");
+  logger.error("");
+  logger.error("安全配置参数 (危险操作默认禁用):");
+  logger.error("  --allow-drop    启用 DROP TABLE 操作");
+  logger.error("  --allow-delete  启用 DELETE 操作");
+  logger.error("  --allow-update  启用 UPDATE 操作");
+  logger.error("  --allow-alter   启用所有 ALTER TABLE 操作");
+  logger.error("  --allow-all     启用所有危险操作");
+  logger.error("");
+  logger.error("ALTER TABLE 细粒度权限 (默认允许安全的操作):");
+  logger.error("  --allow-add-column     允许新增字段 (默认允许)");
+  logger.error("  --allow-drop-column    允许删除字段 (默认禁止)");
+  logger.error("  --allow-modify-column  允许修改字段 (默认禁止)");
+  logger.error("  --allow-rename-column  允许重命名字段 (默认允许)");
+  logger.error("  --allow-rename-table   允许重命名表 (默认允许)");
+  logger.error("");
+  logger.error("SQL 注入防护参数:");
+  logger.error("  --disable-sql-injection-check  禁用 SQL 注入检测");
+  logger.error("  --sql-injection-warn-only       检测到注入时仅警告，不阻止执行");
+  logger.error("  --disable-sql-parser            禁用 SQL 解析器深度分析");
   process.exit(1);
 }
 
@@ -233,6 +258,14 @@ process.on('unhandledRejection', (reason, promise) => {
  */
 async function runServer() {
   try {
+    // 初始化安全配置
+    const securityConfig = parseSecurityConfigFromArgs(args);
+    initSecurityConfig(securityConfig);
+
+    // 初始化 SQL 注入检测配置
+    const sqlInjectionConfig = parseSqlInjectionConfigFromArgs(args);
+    initSqlInjectionConfig(sqlInjectionConfig);
+
     logger.info(`Initializing ${dbType} database...`);
     if (dbType === 'sqlite') {
       logger.info(`Database path: ${connectionInfo}`);
@@ -243,17 +276,17 @@ async function runServer() {
     } else if (dbType === 'mysql') {
       logger.info(`Host: ${connectionInfo.host}, Database: ${connectionInfo.database}`);
     }
-    
+
     // Initialize the database
     await initDatabase(connectionInfo, dbType);
-    
+
     const dbInfo = getDatabaseMetadata();
     logger.info(`Connected to ${dbInfo.name} database`);
-    
+
     logger.info('Starting MCP server...');
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    
+
     logger.info('Server running. Press Ctrl+C to exit.');
   } catch (error) {
     logger.error("Failed to initialize:", error);

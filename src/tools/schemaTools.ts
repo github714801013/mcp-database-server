@@ -1,5 +1,7 @@
 import { dbAll, dbExec, getListTablesQuery, getDescribeTableQuery } from '../db/index.js';
 import { formatSuccessResponse } from '../utils/formatUtils.js';
+import { validateOperation, validateAlterSql } from '../config/securityConfig.js';
+import { validateSqlSafety, validateIdentifier, escapeIdentifier } from '../utils/sqlInjectionGuard.js';
 
 /**
  * Create a new table in the database
@@ -11,6 +13,9 @@ export async function createTable(query: string) {
     if (!query.trim().toLowerCase().startsWith("create table")) {
       throw new Error("Only CREATE TABLE statements are allowed");
     }
+
+    // SQL 注入检测
+    validateSqlSafety(query, 'create_table');
 
     await dbExec(query);
     return formatSuccessResponse({ success: true, message: "Table created successfully" });
@@ -30,6 +35,12 @@ export async function alterTable(query: string) {
       throw new Error("Only ALTER TABLE statements are allowed");
     }
 
+    // SQL 注入检测
+    validateSqlSafety(query, 'alter_table');
+
+    // 细粒度权限检查：根据 ALTER 具体操作类型检查权限
+    validateAlterSql(query);
+
     await dbExec(query);
     return formatSuccessResponse({ success: true, message: "Table altered successfully" });
   } catch (error: any) {
@@ -48,29 +59,36 @@ export async function dropTable(tableName: string, confirm: boolean) {
     if (!tableName) {
       throw new Error("Table name is required");
     }
-    
+
+    // 验证表名安全性
+    validateIdentifier(tableName);
+
     if (!confirm) {
-      return formatSuccessResponse({ 
-        success: false, 
-        message: "Safety confirmation required. Set confirm=true to proceed with dropping the table." 
+      return formatSuccessResponse({
+        success: false,
+        message: "Safety confirmation required. Set confirm=true to proceed with dropping the table."
       });
     }
+
+    // 安全检查：验证 DROP TABLE 操作权限
+    validateOperation('drop');
 
     // First check if table exists by directly querying for tables
     const query = getListTablesQuery();
     const tables = await dbAll(query);
     const tableNames = tables.map(t => t.name);
-    
+
     if (!tableNames.includes(tableName)) {
       throw new Error(`Table '${tableName}' does not exist`);
     }
-    
-    // Drop the table
-    await dbExec(`DROP TABLE "${tableName}"`);
-    
-    return formatSuccessResponse({ 
-      success: true, 
-      message: `Table '${tableName}' dropped successfully` 
+
+    // Drop the table - 使用安全转义的表名
+    const safeTableName = escapeIdentifier(tableName);
+    await dbExec(`DROP TABLE ${safeTableName}`);
+
+    return formatSuccessResponse({
+      success: true,
+      message: `Table '${tableName}' dropped successfully`
     });
   } catch (error: any) {
     throw new Error(`Error dropping table: ${error.message}`);

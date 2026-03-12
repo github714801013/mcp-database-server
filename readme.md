@@ -22,6 +22,111 @@ npm install
 npm run build
 ```
 
+### 使用 Conda 环境开发（推荐）
+
+本项目支持使用 Conda 创建独立的 Python + Node.js 混合开发环境：
+
+```bash
+# 创建 conda 环境
+conda create -n mcp-database python=3.11 nodejs=20 -y
+
+# 激活环境
+conda activate mcp-database
+
+# 安装项目依赖
+npm install
+
+# 编译项目
+npm run build
+```
+
+或者使用提供的快捷脚本：
+
+```bash
+# Windows
+setup-env.bat
+
+# Linux/macOS
+source setup-env.sh
+```
+
+## 安全配置
+
+本服务器支持对危险操作进行安全控制，采用**细粒度权限管理**：
+
+### 粗粒度权限
+
+| 参数 | 说明 | 默认 |
+|------|------|------|
+| `--allow-drop` | 启用 DROP TABLE 操作 | 禁止 |
+| `--allow-delete` | 启用 DELETE 操作 | 禁止 |
+| `--allow-update` | 启用 UPDATE 操作 | 禁止 |
+| `--allow-alter` | 启用所有 ALTER TABLE 操作 | 禁止 |
+| `--allow-all` | 启用所有危险操作 | - |
+
+### ALTER TABLE 细粒度权限
+
+| 参数 | 说明 | 默认 |
+|------|------|------|
+| `--allow-add-column` | 允许新增字段 | ✅ **允许** |
+| `--allow-drop-column` | 允许删除字段 | 禁止 |
+| `--allow-modify-column` | 允许修改字段类型 | 禁止 |
+| `--allow-rename-column` | 允许重命名字段 | ✅ **允许** |
+| `--allow-rename-table` | 允许重命名表 | ✅ **允许** |
+| `--allow-add-constraint` | 允许添加约束 | ✅ **允许** |
+| `--allow-drop-constraint` | 允许删除约束 | 禁止 |
+
+**使用示例：**
+
+```bash
+# 默认安全模式（ADD COLUMN 和 RENAME 默认允许）
+node dist/src/index.js /path/to/database.db
+
+# 允许删除字段
+node dist/src/index.js /path/to/database.db --allow-drop-column
+
+# 仅允许新增和修改字段
+node dist/src/index.js /path/to/database.db --allow-add-column --allow-modify-column
+```
+
+## SQL 注入防护
+
+本服务器内置 SQL 注入检测功能，**默认启用**，采用**双层防护机制**：
+
+### 防护技术
+
+1. **SQL 语法解析器** (`node-sql-parser`)
+   - 将 SQL 解析为抽象语法树 (AST)
+   - 检测 UNION 注入、堆叠查询、永真条件
+   - 识别危险函数调用和系统变量访问
+
+2. **正则表达式模式匹配**
+   - 覆盖已知注入模式
+   - 按风险等级分类检测
+
+### 检测的注入模式
+
+| 风险等级 | 检测内容 |
+|----------|----------|
+| **Critical** | 命令注入 (`; DROP`), 系统函数 (`xp_cmdshell`) |
+| **High** | 条件注入 (`' OR '1'='1`), 信息泄露 (`@@version`, `information_schema`) |
+| **Medium** | 危险函数 (`sleep()`, `load_file()`), 十六进制编码 |
+| **Low** | SQL 注释、字符串拼接 |
+
+### 命令行参数
+
+| 参数 | 说明 |
+|------|------|
+| `--disable-sql-injection-check` | 禁用 SQL 注入检测（不推荐） |
+| `--sql-injection-warn-only` | 检测到注入时仅警告，不阻止执行 |
+| `--disable-sql-parser` | 禁用 SQL 解析器，仅使用正则匹配 |
+
+### 依赖
+
+```bash
+npm install node-sql-parser
+```
+
 ## Usage Options
 
 There are two ways to use this MCP server with Claude:

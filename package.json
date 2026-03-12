@@ -24,9 +24,11 @@
     },
     "dependencies": {
         "@aws-sdk/rds-signer": "^3.0.0",
+        "@executeautomation/database-server": "file:",
         "@modelcontextprotocol/sdk": "1.9.0",
         "mssql": "11.0.1",
         "mysql2": "^3.14.1",
+        "node-sql-parser": "^5.3.13",
         "pg": "^8.11.3",
         "sqlite3": "5.1.7"
     },

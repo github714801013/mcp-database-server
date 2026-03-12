@@ -1,5 +1,5 @@
 # 使用官方 Node.js 镜像（可根据需要替换为私有镜像）
-FROM node:20-alpine
+FROM harbor.saas.ch999.cn:1088/common/node:20-alpine
 
 # 安装编译依赖（sqlite3 需要）
 RUN apk add --no-cache python3 make g++
@@ -14,11 +14,11 @@ WORKDIR /app
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
-# Install dependencies (使用 --ignore-scripts 避免 native 模块编译问题)
-RUN npm ci --ignore-scripts
+# Install dependencies (使用 --ignore-scripts --legacy-peer-deps 避免 prepare 钩子和依赖冲突)
+RUN npm ci --ignore-scripts --legacy-peer-deps || npm install --ignore-scripts --legacy-peer-deps
 
 # Rebuild native modules
-RUN npm rebuild sqlite3
+RUN npm rebuild sqlite3 || true
 
 # Copy source code (including tsconfig.json)
 COPY . .

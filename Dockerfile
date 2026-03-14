@@ -11,13 +11,13 @@ LABEL version="1.1.0"
 
 WORKDIR /app
 
-# Copy package.json and package-lock.json
-COPY package*.json ./
+# Copy package.json, package-lock.json, and configuration files for build
+COPY package*.json tsconfig.json global.d.ts ./
 
 # Install dependencies (移除 --ignore-scripts 以允许 sqlite3 编译)
 RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
-# Copy source code (including tsconfig.json)
+# Copy source code
 COPY . .
 
 # Build the TypeScript code

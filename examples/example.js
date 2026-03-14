@@ -1,63 +1,26 @@
 // Example of using the SQLite MCP Server
 
-// First, start the server with a SQLite database file:
-// npx @modelcontextprotocol/server-sqlite ./example.db
+// 测试 SQL 注入防护功能
+import { detectSqlInjection } from '../dist/src/utils/sqlInjectionGuard.js';
 
-// Then, use the Claude Desktop app with the following config:
-/*
-{
-  "mcpServers": {
-    "sqlite": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-sqlite",
-        "./example.db"
-      ]
-    }
-  }
-}
-*/
+// 测试用例
+const testCases = [
+  { sql: "SELECT * FROM users WHERE id = 1", expected: false, desc: "正常查询" },
+  { sql: "SELECT * FROM users WHERE id = 1 OR 1=1", expected: true, desc: "OR 1=1 注入" },
+  { sql: "SELECT * FROM users WHERE name = 'admin'--'", expected: true, desc: "注释注入" },
+  { sql: "SELECT * FROM users UNION SELECT * FROM passwords", expected: true, desc: "UNION 注入" },
+];
 
-// Example prompts to use with Claude:
+console.log("=== SQL 注入防护测试 ===\n");
 
-/*
-1. Create a table:
-   "Create a 'users' table with columns for id, name, email, and created_at"
+testCases.forEach((test, index) => {
+  const result = detectSqlInjection(test.sql);
+  const status = result.isInjection === test.expected ? "✅" : "❌";
+  console.log(`${index + 1}. ${test.desc}`);
+  console.log(`   SQL: ${test.sql}`);
+  console.log(`   检测结果: ${result.isInjection ? "检测到注入" : "安全"}`);
+  console.log(`   风险等级: ${result.riskLevel}`);
+  console.log(`   预期: ${test.expected ? "注入" : "安全"} ${status}\n`);
+});
 
-2. Insert data:
-   "Insert a few sample users into the users table"
-
-3. Query data:
-   "Show me all users in the database"
-
-4. Describe the schema:
-   "What tables exist in the database and what are their structures?"
-
-5. Add an insight:
-   "Analyze the user data and add an insight about the user distribution"
-*/
-
-// SQLite setup
-// 1. Create table example
-/*
-CREATE TABLE users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  email TEXT UNIQUE NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-*/
-
-// 2. Insert data example
-/*
-INSERT INTO users (name, email) VALUES 
-('John Doe', 'john@example.com'),
-('Jane Smith', 'jane@example.com'),
-('Bob Johnson', 'bob@example.com')
-*/
-
-// 3. Query example
-/*
-SELECT * FROM users
-*/ 
+console.log("=== 测试完成 ===");

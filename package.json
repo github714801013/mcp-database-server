@@ -14,7 +14,7 @@
         "dist"
     ],
     "scripts": {
-        "build": "tsc && shx chmod +x dist/src/index.js",
+        "build": "tsc -p tsconfig.json && shx chmod +x dist/src/index.js",
         "prepare": "npm run build",
         "watch": "tsc --watch",
         "start": "node dist/src/index.js",

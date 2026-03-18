@@ -2,7 +2,7 @@
 FROM harbor.saas.ch999.cn:1088/common/node:20-alpine
 
 # 安装 sqlite3 编译所需的依赖
-RUN apk add --no-cache python3 make g++ sqlite-dev
+RUN apk add --no-cache python3 py3-setuptools make g++ sqlite-dev
 
 WORKDIR /app
 

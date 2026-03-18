@@ -1,0 +1,6 @@
+{
+  "test_db": {
+    "type": "sqlite",
+    "path": "./data/test.db"
+  }
+}

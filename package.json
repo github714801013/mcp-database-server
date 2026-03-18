@@ -8,15 +8,17 @@
     "bugs": "https://github.com/executeautomation/database-server/issues",
     "type": "module",
     "bin": {
-        "ea-database-server": "dist/src/index.js"
+        "ea-database-server": "dist/src/index.js",
+        "ea-database-server-sse": "dist/src/server-sse.js"
     },
     "files": [
         "dist"
     ],
     "scripts": {
-        "build": "tsc -p tsconfig.json && shx chmod +x dist/src/index.js",
+        "build": "tsc -p tsconfig.json && shx chmod +x dist/src/index.js && shx chmod +x dist/src/server-sse.js",
         "watch": "tsc --watch",
         "start": "node dist/src/index.js",
+        "start:sse": "node dist/src/server-sse.js",
         "dev": "tsc && node dist/src/index.js",
         "example": "node examples/example.js",
         "clean": "rimraf dist"
@@ -24,6 +26,7 @@
     "dependencies": {
         "@aws-sdk/rds-signer": "^3.0.0",
         "@modelcontextprotocol/sdk": "1.9.0",
+        "express": "^5.2.1",
         "mssql": "11.0.1",
         "mysql2": "^3.14.1",
         "node-sql-parser": "^5.3.13",
@@ -31,6 +34,7 @@
         "sqlite3": "5.1.7"
     },
     "devDependencies": {
+        "@types/express": "^5.0.6",
         "@types/mssql": "^9.1.5",
         "@types/pg": "^8.11.13",
         "@types/sqlite3": "5.1.0",

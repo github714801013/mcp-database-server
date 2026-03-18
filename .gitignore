@@ -136,3 +136,5 @@ dist
 .pnp.*
 
 databases.json
+jiuji_docker
+jenkins-build.sh

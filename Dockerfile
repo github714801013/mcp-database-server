@@ -1,33 +1,24 @@
-# 使用官方 Node.js 镜像（可根据需要替换为私有镜像）
+# 使用官方 Node.js 镜像
 FROM harbor.saas.ch999.cn:1088/common/node:20-alpine
 
-# 安装编译依赖（sqlite3 需要）
+# 安装 sqlite3 编译所需的依赖
 RUN apk add --no-cache python3 make g++ sqlite-dev
-
-# Add metadata
-LABEL maintainer="ExecuteAutomation <info@executeautomation.com>"
-LABEL description="ExecuteAutomation Database Server - A Model Context Protocol server for SQLite"
-LABEL version="1.1.0"
 
 WORKDIR /app
 
-# Copy package.json, package-lock.json, and configuration files for build
-COPY package*.json tsconfig.json global.d.ts ./
-
-# Install dependencies (移除 --ignore-scripts 以允许 sqlite3 编译)
+# 复制依赖文件并安装
+COPY package*.json tsconfig.json ./
 RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
-# Copy source code
+# 复制源码并编译
 COPY . .
-
-# Build the TypeScript code
 RUN npm run build
 
-# Install mcp-proxy globally (可选)
-RUN npm install -g mcp-proxy || true
+# 暴露 SSE 默认端口
+EXPOSE 3001
 
-# Set the entrypoint (正确的路径)
-ENTRYPOINT ["node", "dist/src/index.js"]
+# 环境变量设置
+ENV PORT=3001
 
-# Default command (to be overridden by the user)
-CMD [""]
+# 默认启动命令为 SSE 模式
+ENTRYPOINT ["npm", "run", "start:sse"]

@@ -1,4 +1,6 @@
 import { formatErrorResponse } from '../utils/formatUtils.js';
+import { getSupportedDbTypes } from '../db/multiDbManager.js';
+import type { Request, Response } from 'express';
 
 import { readQueryMulti, writeQueryMulti, exportQueryMulti } from '../tools/multiDbQueryTools.js';
 import { createTableMulti, alterTableMulti, dropTableMulti, listTablesMulti, describeTableMulti } from '../tools/multiDbSchemaTools.js';
@@ -139,5 +141,14 @@ export async function handleToolCallMulti(name: string, args: any) {
     }
   } catch (error: any) {
     return formatErrorResponse(error);
+  }
+}
+
+export async function handleListSupportedDbs(req: Request, res: Response) {
+  try {
+    const supportedDbs = getSupportedDbTypes();
+    res.status(200).json(supportedDbs);
+  } catch (error: any) {
+    res.status(500).json(formatErrorResponse(error));
   }
 }

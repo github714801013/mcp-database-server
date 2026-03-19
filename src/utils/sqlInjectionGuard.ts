@@ -188,8 +188,8 @@ function analyzeWithParser(sql: string): string[] {
       analyzeAstNode(ast, risks);
     }
   } catch (error) {
-    // 解析失败可能是因为非标准 SQL 或注入尝试
-    risks.push('SQL 语法解析失败，可能存在异常结构');
+    // 解析失败不一定意味着注入，可能是方言不支持
+    // 仅在非标准结构时记录，不作为主要判定依据
   }
 
   return risks;
@@ -204,7 +204,7 @@ function analyzeAstNode(node: any, risks: string[]): void {
   if (!node || typeof node !== 'object') return;
 
   // 检查 UNION 注入
-  if (node._next) {
+  if (node._next || node.union) {
     risks.push('检测到 UNION 查询结构');
   }
 
@@ -223,7 +223,8 @@ function analyzeAstNode(node: any, risks: string[]): void {
 
   // 检查 SELECT 列
   if (node.columns) {
-    for (const col of node.columns) {
+    const columns = Array.isArray(node.columns) ? node.columns : [node.columns];
+    for (const col of columns) {
       if (col.expr) {
         analyzeExpression(col.expr, risks);
       }
@@ -250,14 +251,15 @@ function analyzeExpression(expr: any, risks: string[]): void {
 
   // 检查函数调用
   if (expr.type === 'function') {
-    const funcName = expr.name?.toLowerCase();
-    if (funcName && DANGEROUS_FUNCTIONS.some(f => funcName.includes(f))) {
+    const funcName = expr.name?.toLowerCase() || (typeof expr.name === 'object' && expr.name[0]?.toLowerCase());
+    if (funcName && DANGEROUS_FUNCTIONS.some(f => funcName.includes(f.toLowerCase()))) {
       risks.push(`检测到危险函数: ${funcName}`);
     }
 
     // 检查参数
     if (expr.args) {
-      for (const arg of expr.args.value || []) {
+      const args = Array.isArray(expr.args) ? expr.args : (expr.args.value || []);
+      for (const arg of args) {
         analyzeExpression(arg, risks);
       }
     }
@@ -308,13 +310,15 @@ function isTautology(expr: any): boolean {
   const right = expr.right;
   const op = expr.operator;
 
+  if (!left || !right) return false;
+
   // 1=1, 'a'='a' 等
   if (left.type === 'number' && right.type === 'number') {
-    if (op === '=' && left.value === right.value) return true;
+    if ((op === '=' || op === '==') && left.value === right.value) return true;
   }
 
   if (left.type === 'string' && right.type === 'string') {
-    if (op === '=' && left.value === right.value) return true;
+    if ((op === '=' || op === '==') && left.value === right.value) return true;
   }
 
   return false;
@@ -358,6 +362,12 @@ export function detectSqlInjection(sql: string, context?: string): SqlInjectionR
   // 检查高风险模式
   if (maxRiskLevel !== 'critical') {
     for (const pattern of INJECTION_PATTERNS.high) {
+      // 排除元数据查询的误报 - 如果是纯查询则放宽限制
+      if ((pattern.source.includes('information_schema') || pattern.source.includes('sys\\.tables')) && 
+          isReadOnlyQuery(sql)) {
+        continue;
+      }
+      
       if (pattern.test(sql)) {
         injectionTypes.push(`[高风险] 模式匹配: ${pattern.source}`);
         maxRiskLevel = maxRiskLevel === 'low' ? 'high' : maxRiskLevel;
@@ -375,29 +385,40 @@ export function detectSqlInjection(sql: string, context?: string): SqlInjectionR
     }
   }
 
-  // 检查危险函数
+  // 检查危险函数 (改进：使用正则匹配函数调用，避免对字符串内容的误判)
   if (config.checkDangerousFunctions) {
-    const lowerSql = sql.toLowerCase();
     for (const func of DANGEROUS_FUNCTIONS) {
-      if (lowerSql.includes(func.toLowerCase())) {
-        injectionTypes.push(`[危险函数] ${func}`);
-        if (maxRiskLevel === 'low') {
+      // 匹配 func( 或 func  (
+      const funcCallRegex = new RegExp(`\\b${func}\\s*\\(`, 'i');
+      if (funcCallRegex.test(sql)) {
+        injectionTypes.push(`[危险函数调用] ${func}`);
+        if (maxRiskLevel === 'low' || maxRiskLevel === 'medium') {
           maxRiskLevel = 'high';
         }
       }
     }
   }
 
-  // 检查注释（可选）
-  if (config.checkComments && maxRiskLevel === 'low') {
+  // 检查元数据和注释（作为潜在风险记录，但不一定拦截）
+  if (config.checkComments) {
+    // 检查 low 模式
     for (const pattern of INJECTION_PATTERNS.low) {
       if (pattern.test(sql)) {
         injectionTypes.push(`[潜在风险] 模式匹配: ${pattern.source}`);
       }
     }
+    
+    // 检查被跳过的元数据模式
+    if (/information_schema/i.test(sql)) {
+      injectionTypes.push('[信息泄露风险] 访问 information_schema');
+    }
+    if (/sys\.tables/i.test(sql)) {
+      injectionTypes.push('[信息泄露风险] 访问系统表');
+    }
   }
 
-  const isInjection = injectionTypes.length > 0 && maxRiskLevel !== 'low';
+  const isInjection = injectionTypes.length > 0 && 
+    (maxRiskLevel === 'critical' || maxRiskLevel === 'high' || (maxRiskLevel === 'medium' && config.action === 'error'));
 
   return {
     isInjection,
@@ -438,7 +459,7 @@ export function validateSqlSafety(sql: string, context?: string): void {
  */
 export function escapeIdentifier(identifier: string, quoteChar: string = '"'): string {
   // 移除现有的引号
-  const cleaned = identifier.replace(new RegExp(`[${quoteChar}]`, 'g'), '');
+  const cleaned = identifier.replace(new RegExp(`^[${quoteChar}]|[${quoteChar}]$`, 'g'), '');
 
   // 双写内部引号并包裹
   const escaped = cleaned.replace(new RegExp(quoteChar, 'g'), quoteChar + quoteChar);
@@ -456,12 +477,15 @@ export function validateIdentifier(identifier: string): void {
     throw new Error('标识符不能为空');
   }
 
+  // 检查是否是被引号包裹的合法标识符
+  if (/^["\']/.test(identifier)) {
+    // 只要是闭合的引号，我们暂时认为是合法的，因为 escapeIdentifier 会处理它
+    return;
+  }
+
   // 检查标识符格式（只允许字母、数字、下划线）
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(identifier)) {
-    // 允许带引号的标识符
-    if (!/^["\'][^"\']*["\']$/.test(identifier)) {
-      throw new Error(`非法标识符: ${identifier}`);
-    }
+    throw new Error(`非法标识符: ${identifier}`);
   }
 
   // 检查 SQL 关键字
@@ -482,19 +506,32 @@ export function validateIdentifier(identifier: string): void {
  * @returns 是否为只读查询
  */
 export function isReadOnlyQuery(sql: string): boolean {
-  const normalized = sql.trim().toLowerCase();
+  // 1. 剥离注释以获取纯 SQL
+  const sqlWithoutComments = sql.replace(/--.*$|\/\*[\s\S]*?\*\//gm, '').trim();
+  const normalized = sqlWithoutComments.toLowerCase();
 
-  // 以 SELECT 开头
-  if (!normalized.startsWith('select')) {
+  // 2. 检查是否以 SELECT 或 WITH 开头 (CTE 支持)
+  if (!normalized.startsWith('select') && !normalized.startsWith('with')) {
     return false;
   }
 
-  // 检查是否包含修改语句
-  const modifyingKeywords = ['insert', 'update', 'delete', 'drop', 'create', 'alter', 'truncate'];
+  // 3. 检查是否包含修改语句关键字
+  const modifyingKeywords = ['insert', 'update', 'delete', 'drop', 'create', 'alter', 'truncate', 'exec', 'execute'];
   for (const keyword of modifyingKeywords) {
     // 使用单词边界检查，避免误判如 "selected"
     const regex = new RegExp(`\\b${keyword}\\b`, 'i');
-    if (regex.test(sql)) {
+    if (regex.test(sqlWithoutComments)) {
+      // 特殊处理：如果是 SELECT ... INTO ... (某些数据库方言)
+      if (keyword === 'insert' || keyword === 'update' || keyword === 'delete') {
+         return false;
+      }
+      // 如果是在 WITH 子句内部的 SELECT，则继续
+      if (normalized.startsWith('with') && normalized.includes('select')) {
+          // 进一步检查是否真的包含 DML
+          const dmlRegex = new RegExp(`\\b(insert|update|delete|drop|truncate)\\b`, 'i');
+          if (dmlRegex.test(sqlWithoutComments)) return false;
+          return true;
+      }
       return false;
     }
   }

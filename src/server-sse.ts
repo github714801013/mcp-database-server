@@ -6,7 +6,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { initMultiDatabase, closeMultiDatabase } from './db/multiDbManager.js';
-import { handleListToolsMulti, handleToolCallMulti, handleListSupportedDbs } from './handlers/multiDbToolHandlers.js';
+import { handleListToolsMulti, handleToolCallMulti } from './handlers/multiDbToolHandlers.js';
 import { initSecurityConfig, parseSecurityConfigFromArgs } from './config/securityConfig.js';
 import { initSqlInjectionConfig, parseSqlInjectionConfigFromArgs } from './utils/sqlInjectionGuard.js';
 
@@ -40,8 +40,6 @@ app.post('/message', async (req, res) => {
     res.status(500).send("SSE connection not established");
   }
 });
-
-app.get('/api/multidb/supported-databases', handleListSupportedDbs);
 
 async function start() {
   const args = process.argv.slice(2);

@@ -8,6 +8,9 @@ WORKDIR /app
 
 # 复制依赖文件并安装
 COPY package*.json tsconfig.json ./
+
+# 设置 sqlite3 二进制下载镜像，避免在旧内核环境（3.10）下由于 node-gyp 编译权限问题（printf: Operation not permitted）导致失败
+RUN npm config set sqlite3_binary_host_mirror https://npmmirror.com/mirrors/sqlite3/
 RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
 # 复制源码并编译

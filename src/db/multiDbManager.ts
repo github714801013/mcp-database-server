@@ -30,8 +30,11 @@ export function getDbAdapter(dbName: string): DbAdapter {
   return adapter;
 }
 
-export function getSupportedDbTypes(): string[] {
-  return Array.from(adapters.keys());
+export function getActiveDatabases(): { name: string, type: string }[] {
+  return Array.from(adapters.entries()).map(([name, adapter]) => ({
+    name,
+    type: adapter.getMetadata().type
+  }));
 }
 
 export async function closeMultiDatabase(): Promise<void> {

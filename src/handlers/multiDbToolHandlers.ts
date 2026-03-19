@@ -1,5 +1,5 @@
 import { formatErrorResponse } from '../utils/formatUtils.js';
-import { getSupportedDbTypes } from '../db/multiDbManager.js';
+import { getActiveDatabases } from '../db/multiDbManager.js';
 import type { Request, Response } from 'express';
 
 import { readQueryMulti, writeQueryMulti, exportQueryMulti } from '../tools/multiDbQueryTools.js';
@@ -104,6 +104,15 @@ export function handleListToolsMulti() {
           },
           required: ["database_name", "table_name"],
         },
+      },
+      {
+        name: "list_databases",
+        description: "List all configured and available databases and their types",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          required: []
+        }
       }
     ],
   };
@@ -136,19 +145,13 @@ export async function handleToolCallMulti(name: string, args: any) {
       case "describe_table":
         return await describeTableMulti(args.database_name, args.table_name);
       
+      case "list_databases":
+        return { content: [{ type: "text", text: JSON.stringify(getActiveDatabases(), null, 2) }] };
+      
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error: any) {
     return formatErrorResponse(error);
-  }
-}
-
-export async function handleListSupportedDbs(req: Request, res: Response) {
-  try {
-    const supportedDbs = getSupportedDbTypes();
-    res.status(200).json(supportedDbs);
-  } catch (error: any) {
-    res.status(500).json(formatErrorResponse(error));
   }
 }

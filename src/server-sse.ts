@@ -26,18 +26,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   return await handleToolCallMulti(request.params.name, request.params.arguments);
 });
 
-let transport: SSEServerTransport;
+// 使用 Map 管理不同会话的 transport 实例
+const transports = new Map<string, SSEServerTransport>();
 
 app.get('/sse', async (req, res) => {
-  transport = new SSEServerTransport("/message", res);
+  const transport = new SSEServerTransport("/message", res);
+  
+  // 建立连接后，将 transport 实例保存到 Map 中
+  // transport.sessionId 是 SDK 生成的会话 ID
+  const sessionId = (transport as any).sessionId;
+  if (sessionId) {
+    transports.set(sessionId, transport);
+    console.log(`[INFO] New SSE connection established: ${sessionId}`);
+    
+    res.on('close', () => {
+      transports.delete(sessionId);
+      console.log(`[INFO] SSE connection closed: ${sessionId}`);
+    });
+  }
+
   await server.connect(transport);
 });
 
 app.post('/message', async (req, res) => {
+  const sessionId = req.query.sessionId as string;
+  const transport = transports.get(sessionId);
+
   if (transport) {
     await transport.handlePostMessage(req, res);
   } else {
-    res.status(500).send("SSE connection not established");
+    // 兼容逻辑：如果没有 sessionId 且当前只有一个 transport，尝试使用它（针对旧版客户端或单会话场景）
+    if (!sessionId && transports.size === 1) {
+      const [firstTransport] = transports.values();
+      await firstTransport.handlePostMessage(req, res);
+    } else {
+      res.status(404).send("SSE connection not found or expired. Make sure to provide a valid sessionId.");
+    }
   }
 });
 

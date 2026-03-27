@@ -13,32 +13,33 @@ import { initSqlInjectionConfig, parseSqlInjectionConfigFromArgs } from './utils
 const app = express();
 const port = process.env.PORT || 3001;
 
-const server = new Server({
-  name: "executeautomation/database-server-sse",
-  version: "1.1.0",
-}, { capabilities: { tools: {} } });
-
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return handleListToolsMulti();
-});
-
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  return await handleToolCallMulti(request.params.name, request.params.arguments);
-});
-
 // 使用 Map 管理不同会话的 transport 实例
 const transports = new Map<string, SSEServerTransport>();
 
 app.get('/sse', async (req, res) => {
+  // 每个连接创建独立的 Server 实例，避免多会话时 _transport 被覆盖
+  const server = new Server({
+    name: "executeautomation/database-server-sse",
+    version: "1.1.0",
+  }, { capabilities: { tools: {} } });
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    return handleListToolsMulti();
+  });
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    return await handleToolCallMulti(request.params.name, request.params.arguments);
+  });
+
   const transport = new SSEServerTransport("/message", res);
-  
+
   // 建立连接后，将 transport 实例保存到 Map 中
   // transport.sessionId 是 SDK 生成的会话 ID
   const sessionId = (transport as any).sessionId;
   if (sessionId) {
     transports.set(sessionId, transport);
     console.log(`[INFO] New SSE connection established: ${sessionId}`);
-    
+
     res.on('close', () => {
       transports.delete(sessionId);
       console.log(`[INFO] SSE connection closed: ${sessionId}`);

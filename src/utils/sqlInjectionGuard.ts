@@ -110,8 +110,6 @@ const INJECTION_PATTERNS = {
 
   // 中等风险模式
   medium: [
-    /'\s*(or|and)\s/i,
-    /"\s*(or|and)\s/i,
     /\bunion\b.*\bselect\b/i,
     /\bselect\b.*\bfrom\b.*\bunion\b/i,
     /load_file\s*\(/i,
